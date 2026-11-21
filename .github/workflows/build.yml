@@ -1,0 +1,114 @@
+
+name: PowerTools V15 - Build & Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and Package PowerTools
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Prepare Project Structure
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p src/main/java/de/powersmp/powertools
+          mkdir -p src/main/resources
+          mkdir -p lib
+
+          cp PowerTools.java src/main/java/de/powersmp/powertools/PowerTools.java
+          cp config.yml src/main/resources/config.yml
+          cp plugin.yml src/main/resources/plugin.yml
+          cp PowerEco.jar lib/PowerEco.jar
+
+          echo "Project structure prepared!"
+
+      - name: Verify Project
+        run: |
+          test -f pom.xml
+          test -f src/main/java/de/powersmp/powertools/PowerTools.java
+          test -f src/main/resources/plugin.yml
+          test -f src/main/resources/config.yml
+          test -f lib/PowerEco.jar
+
+          echo "All required files found!"
+
+      - name: Compile PowerTools
+        run: mvn --batch-mode --errors clean package
+
+      - name: Prepare Release
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p release
+
+          JAR=$(find target -maxdepth 1 -type f \
+            -name '*.jar' \
+            ! -name 'original-*.jar' \
+            | head -n 1)
+
+          test -n "$JAR"
+
+          cp "$JAR" release/PowerTools.jar
+
+          if [ -f README.md ]; then
+            cp README.md release/
+          elif [ -f README.txt ]; then
+            cp README.txt release/
+          fi
+
+          if [ -f resourcepack/pack.mcmeta ]; then
+            cd resourcepack
+            zip -r ../release/PowerTools-ResourcePack.zip .
+            cd ..
+          fi
+
+          echo "Release prepared!"
+          ls -lah release/
+
+      - name: Create Final ZIP
+        run: |
+          cd release
+          zip -r ../PowerTools-V15-Release.zip .
+          cd ..
+
+          unzip -l PowerTools-V15-Release.zip
+
+      - name: Upload Plugin JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerTools-V15-JAR
+          path: release/PowerTools.jar
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Complete ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerTools-V15-Release
+          path: PowerTools-V15-Release.zip
+          if-no-files-found: error
+          retention-days: 30
